@@ -1,0 +1,34 @@
+---
+title: "Scrubbing Data from PDF"
+author: "Will Rogers"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+setwd("~/Downloads")
+require(tidyverse)
+require(readr)
+txt <- read.table("flir.txt", fill = T)
+
+max.temp.row <- which(txt$V1 == "Bx1")
+photo <- which(str_detect(txt$V1, "FLIR"))
+photo <- photo[-length(photo)]
+
+max.temp <- as.numeric(str_replace(txt$V3[max.temp.row], ",", "."))
+photo.ID <- txt$V1[photo]
+
+df <- tibble(file.number = str_remove(str_remove(photo.ID, "FLIR"), ".jpg"),
+       Temperature.Script = max.temp)
+
+DistanceFlirEntry <- read_csv("~/Desktop/DistanceFlirEntry.csv")
+
+merged <- merge(df, DistanceFlirEntry)
+which(merged$Temperature.Script != merged$Temperature)
+
+merged[4,]
+```
+
+
+
+

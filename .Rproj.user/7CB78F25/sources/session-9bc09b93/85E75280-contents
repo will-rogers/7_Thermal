@@ -1,0 +1,327 @@
+---
+title: "Pre-Cap. Repeat."
+author: "Will Rogers"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Reading in Data
+```{r}
+library(readxl)
+library(lmerTest)
+library(rptR)
+library(data.table)
+library(tidyverse)
+library(corrplot)
+
+rep <- read_excel("RepeatabilityFLIREntered_LN_25 Jul 2023.xlsx")
+cap <- read_excel("FlirW35.xlsx")
+
+
+F.to.C <- function(x, na.rm = FALSE) ifelse(x > 60, (x - 32)*(5/9), x)
+
+rep <- rep %>% 
+  mutate_at(colnames(rep)[7:14], F.to.C)
+```
+
+# Repeatability of Photos from Walkway
+## Modeling Side and Body Part
+```{r}
+lm.le <- lmer(`Left Eye` ~ Period + (1|Animal), data = rep) #singular
+lm.re <- lmer(`Right Eye` ~ Period + (1|Animal), data = rep)
+
+lm.lf <- lmer(`Left Flank` ~ Period + (1|Animal), data = rep) #singular
+lm.rf <- lmer(`Right Flank` ~ Period + (1|Animal), data = rep)
+
+lm.loe <- lmer(`Left Outer Ear` ~ Period + (1|Animal), data = rep)
+lm.roe <- lmer(`Right Outer Ear` ~ Period + (1|Animal), data = rep)
+
+lm.lie <- lmer(`Left Inner Ear` ~ Period + (1|Animal), data = rep) 
+lm.rie <- lmer(`Right Inner Ear` ~ Period + (1|Animal), data = rep) #singular
+```
+
+```{r, message=FALSE,warning=FALSE}
+le.rep <- rpt(`Left Eye` ~ Period + (1|Animal), grname = "Animal",  data = rep)
+re.rep <- rpt(`Right Eye` ~ Period + (1|Animal), grname = "Animal",  data = rep)
+
+lf.rep <- rpt(`Left Flank` ~ Period + (1|Animal), grname = "Animal",  data = rep)
+rf.rep <- rpt(`Right Flank` ~ Period + (1|Animal), grname = "Animal",  data = rep)
+
+loe.rep <- rpt(`Left Outer Ear` ~ Period + (1|Animal), grname = "Animal",  data = rep)
+roe.rep <- rpt(`Right Outer Ear` ~ Period + (1|Animal), grname = "Animal",  data = rep)
+
+lie.rep <- rpt(`Left Inner Ear` ~ Period + (1|Animal), grname = "Animal",  data = rep)
+rie.rep <- rpt(`Right Inner Ear` ~ Period + (1|Animal), grname = "Animal",  data = rep)
+
+combined <- list(le.rep, re.rep, lf.rep, rf.rep, loe.rep, roe.rep, lie.rep, rie.rep)
+```
+
+```{r}
+repeatability <- tibble(
+  metric = factor(rep(c("Left Eye","Right Eye","Left Flank","Right Flank","Left Outer Ear","Right Outer Ear","Left Inner Ear","Right Inner Ear"), each = 1000), 
+                  levels = c("Left Eye","Right Eye","Left Flank","Right Flank","Left Outer Ear","Right Outer Ear","Left Inner Ear","Right Inner Ear"), 
+                  ordered = T),
+  singular.init = rep(c("Y","N","Y","N","N","N","Y","Y"), each = 1000),
+  R = rep(unlist(lapply(combined, function(x) {x$R})), each = 1000),
+  R.lower = rep(unlist(lapply(combined, function(x) {x$CI_emp[1,1]})), each = 1000),
+  R.upper = rep(unlist(lapply(combined, function(x) {x$CI_emp[1,2]})), each = 1000),
+  R.boot = unlist(lapply(combined, function(x) {x$R_boot[,1]})),
+  p = rep(unlist(lapply(combined, function(x) {x$P$LRT_P})), each = 1000)
+)
+
+
+repeatability %>% 
+  mutate(Signif.at.0.1 = p < 0.1) %>% 
+  ggplot(aes(x = metric, ymin = R.lower, ymax = R.upper, fill = singular.init, color = singular.init)) +
+  geom_violin(aes(y = R.boot), scale = "width", alpha = 0.2) +
+  geom_pointrange(aes(y = R, shape = Signif.at.0.1), size = 1.5) +
+  scale_color_discrete(name = "Singular\nInitially?") +
+  scale_fill_discrete(name = "Singular\nInitially?") +
+  labs(x = "Body Part and Side",
+       y = "Repeatability (Empirical and 1k bootstraps)") +
+  theme_classic()
+```
+
+## Ignoring Side - no mas singular!!!
+```{r}
+rep.long <- rep %>% 
+  pivot_longer(colnames(rep)[7:14]) %>% 
+  mutate(body.part = paste0(str_split(name, " ", simplify = T)[,2], 
+                            str_split(name, " ", simplify = T)[,3]),
+         side = str_split(name, " ", simplify = T)[,1])
+```
+
+```{r}
+lm.eye <- lmer(value ~ Period + (1|Animal), data = rep.long %>% filter(body.part == "Eye")) 
+
+lm.flank <- lmer(value ~ Period + (1|Animal), data = rep.long %>% filter(body.part == "Flank")) 
+
+lm.outer <- lmer(value ~ Period + (1|Animal), data = rep.long %>% filter(body.part == "OuterEar"))
+
+lm.inner <- lmer(value ~ Period + (1|Animal), data = rep.long %>% filter(body.part == "InnerEar"))
+```
+
+```{r, message=FALSE,warning=FALSE}
+e.rep <- rpt(value ~ Period + (1|Animal), grname = "Animal",  data = rep.long %>% filter(body.part == "Eye"))
+
+f.rep <- rpt(value ~ Period + (1|Animal), grname = "Animal",  data = rep.long %>% filter(body.part == "Flank"))
+
+oe.rep <- rpt(value ~ Period + (1|Animal), grname = "Animal",  data = rep.long %>% filter(body.part == "OuterEar"))
+
+ie.rep <- rpt(value ~ Period + (1|Animal), grname = "Animal",  data = rep.long %>% filter(body.part == "InnerEar"))
+
+combined <- list(e.rep, f.rep, oe.rep, ie.rep)
+```
+
+```{r}
+repeatability <- tibble(
+  metric = factor(rep(c("Eye","Flank","OuterEar","InnerEar"), each = 1000), 
+                  levels = c("Eye","Flank","OuterEar","InnerEar"), 
+                  labels = c("Eye","Flank","Outer Ear","Inner Ear"), 
+                  ordered = T),
+  singular.init = rep(c("Y","N","N","Y"), each = 1000),
+  R = rep(unlist(lapply(combined, function(x) {x$R})), each = 1000),
+  R.lower = rep(unlist(lapply(combined, function(x) {x$CI_emp[1,1]})), each = 1000),
+  R.upper = rep(unlist(lapply(combined, function(x) {x$CI_emp[1,2]})), each = 1000),
+  R.boot = unlist(lapply(combined, function(x) {x$R_boot[,1]})),
+  p = rep(unlist(lapply(combined, function(x) {x$P$LRT_P})), each = 1000)
+)
+
+
+repeatability %>% 
+  mutate(Signif.at.0.1 = p < 0.1) %>% 
+  ggplot(aes(x = metric, ymin = R.lower, ymax = R.upper, fill = singular.init, color = singular.init)) +
+  geom_violin(aes(y = R.boot), scale = "width", alpha = 0.2) +
+  geom_pointrange(aes(y = R, shape = Signif.at.0.1), size = 1.5) +
+  scale_color_discrete(name = "Singular\nInitially?") +
+  scale_fill_discrete(name = "Singular\nInitially?") +
+  labs(x = "Body Part",
+       y = "Repeatability (Empirical and 1k bootstraps)") +
+  theme_classic()
+```
+
+# Correlation to Core Temp
+
+```{r}
+merged <- merge(rep.long, cap, by.x = "Animal", by.y = "ID")
+dat <- merged %>% filter(Date %in% 44845:44847) 
+
+d1 <- dat %>% filter(Date %in% 44845)
+d2 <- dat %>% filter(Date %in% 44846)
+d3 <- dat %>% filter(Date %in% 44847)
+d1.2 <- dat %>% filter(Date %in% 44845:44846)
+d2.3 <- dat %>% filter(Date %in% 44846:44847)
+d1.3 <- dat %>% filter(Date %in% c(44845,44847))
+d1.2.3 <- dat %>% filter(Date %in% 44845:44847)
+
+df.list <- list(d1, d2, d3, d1.2, d2.3, d1.3, d1.2.3)
+
+eye.results <- lapply(df.list, function(x) {
+  tmp.data <- x %>% 
+            filter(body.part == "Eye") %>% 
+       group_by(Animal) %>% 
+       mutate(value = mean(value, na.rm = T)) %>% 
+       distinct(Animal, .keep_all = T)
+  cor(tmp.data$value, tmp.data$Rectal, use = "pairwise.complete")
+})
+
+
+flank.results <- lapply(df.list, function(x) {
+  tmp.data <- x %>% 
+            filter(body.part == "Flank") %>% 
+       group_by(Animal) %>% 
+       mutate(value = mean(value, na.rm = T)) %>% 
+       distinct(Animal, .keep_all = T)
+  cor(tmp.data$value, tmp.data$Rectal, use = "pairwise.complete")
+})
+
+inner.results <- lapply(df.list, function(x) {
+  tmp.data <- x %>% 
+            filter(body.part == "InnerEar") %>% 
+       group_by(Animal) %>% 
+       mutate(value = mean(value, na.rm = T)) %>% 
+       distinct(Animal, .keep_all = T)
+  cor(tmp.data$value, tmp.data$Rectal, use = "pairwise.complete")
+})
+
+outer.results <- lapply(df.list, function(x) {
+  tmp.data <- x %>% 
+            filter(body.part == "OuterEar") %>% 
+       group_by(Animal) %>% 
+       mutate(value = mean(value, na.rm = T)) %>% 
+       distinct(Animal, .keep_all = T)
+  cor(tmp.data$value, tmp.data$Rectal, use = "pairwise.complete")
+})
+
+mod.list <- list(eye.results, flank.results, inner.results, outer.results)
+```
+
+
+```{r}
+bound <- rbindlist(lapply(mod.list, function(x){
+  inner.join <- lapply(x, function(y){
+    y
+  })
+  tibble(cor = unlist(inner.join),
+         dataset = c("d1", "d2", "d3", "d1.2", "d2.3", "d1.3", "d1.2.3"))
+}))
+
+bound$bodypart = rep(c("eye","flank","inner","outer"), each = length(df.list))
+bound$days = rep(c(1,1,1,2,2,2,3), 4)
+```
+
+
+```{r}
+bound %>% 
+  ggplot(aes(x = factor(days), y = cor)) +
+  geom_violin() +
+  geom_point(aes(color = dataset)) +
+  facet_wrap(. ~ bodypart) +
+  labs(x = "Number of Sampling Days",
+       y = "Prop. Var in Rectal Explained\nby Body Part on WalkWay") + 
+  geom_hline(yintercept = 0, size = 1) +
+  theme_classic()
+```
+
+# Correlation to Inner Ear Temp
+
+```{r}
+merged <- merge(rep.long, cap, by.x = "Animal", by.y = "ID")
+dat <- merged %>% 
+  filter(Date %in% 44845:44847) %>% 
+  group_by(Animal) %>% 
+  mutate(mean.ear = mean(c(LIE, RIE), na.rm = T))
+
+d1 <- dat %>% filter(Date %in% 44845)
+d2 <- dat %>% filter(Date %in% 44846)
+d3 <- dat %>% filter(Date %in% 44847)
+d1.2 <- dat %>% filter(Date %in% 44845:44846)
+d2.3 <- dat %>% filter(Date %in% 44846:44847)
+d1.3 <- dat %>% filter(Date %in% c(44845,44847))
+d1.2.3 <- dat %>% filter(Date %in% 44845:44847)
+
+df.list <- list(d1, d2, d3, d1.2, d2.3, d1.3, d1.2.3)
+
+eye.results <- lapply(df.list, function(x) {
+  tmp.data <- x %>% 
+            filter(body.part == "Eye") %>% 
+       group_by(Animal) %>% 
+       mutate(value = mean(value, na.rm = T)) %>% 
+       distinct(Animal, .keep_all = T)
+  cor(tmp.data$value, tmp.data$mean.ear, use = "pairwise.complete")
+})
+
+
+flank.results <- lapply(df.list, function(x) {
+  tmp.data <- x %>% 
+            filter(body.part == "Flank") %>% 
+       group_by(Animal) %>% 
+       mutate(value = mean(value, na.rm = T)) %>% 
+       distinct(Animal, .keep_all = T)
+  cor(tmp.data$value, tmp.data$mean.ear, use = "pairwise.complete")
+})
+
+inner.results <- lapply(df.list, function(x) {
+  tmp.data <- x %>% 
+            filter(body.part == "InnerEar") %>% 
+       group_by(Animal) %>% 
+       mutate(value = mean(value, na.rm = T)) %>% 
+       distinct(Animal, .keep_all = T)
+  cor(tmp.data$value, tmp.data$mean.ear, use = "pairwise.complete")
+})
+
+outer.results <- lapply(df.list, function(x) {
+  tmp.data <- x %>% 
+            filter(body.part == "OuterEar") %>% 
+       group_by(Animal) %>% 
+       mutate(value = mean(value, na.rm = T)) %>% 
+       distinct(Animal, .keep_all = T)
+  cor(tmp.data$value, tmp.data$mean.ear, use = "pairwise.complete")
+})
+
+mod.list <- list(eye.results, flank.results, inner.results, outer.results)
+```
+
+
+```{r}
+bound <- rbindlist(lapply(mod.list, function(x){
+  inner.join <- lapply(x, function(y){
+    y
+  })
+  tibble(cor = unlist(inner.join),
+         dataset = c("d1", "d2", "d3", "d1.2", "d2.3", "d1.3", "d1.2.3"))
+}))
+
+bound$bodypart = rep(c("eye","flank","inner","outer"), each = length(df.list))
+bound$days = rep(c(1,1,1,2,2,2,3), 4)
+```
+
+
+```{r}
+bound %>% 
+  ggplot(aes(x = factor(days), y = cor)) +
+  geom_violin() +
+  geom_point(aes(color = dataset)) +
+  facet_wrap(. ~ bodypart) +
+  labs(x = "Number of Sampling Days",
+       y = "Prop. Var in Rectal Explained\nby Body Part on WalkWay") + 
+  geom_hline(yintercept = 0, size = 1) +
+  theme_classic()
+```
+
+# Body Part Correlations at Capture
+```{r}
+corrplot(cor(cap[,-1], use = "pairwise.complete"))
+plot(cap[,-1])
+```
+
+
+
+
+
+
+
+
+

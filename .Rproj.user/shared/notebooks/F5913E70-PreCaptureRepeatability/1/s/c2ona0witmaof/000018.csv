@@ -1,7 +1,0 @@
-"0","lm.eye <- lmer(value ~ Period + (1|Animal), data = rep.long %>% filter(body.part == ""Eye"")) "
-"0",""
-"0","lm.flank <- lmer(value ~ Period + (1|Animal), data = rep.long %>% filter(body.part == ""Flank"")) "
-"0",""
-"0","lm.outer <- lmer(value ~ Period + (1|Animal), data = rep.long %>% filter(body.part == ""OuterEar""))"
-"0",""
-"0","lm.inner <- lmer(value ~ Period + (1|Animal), data = rep.long %>% filter(body.part == ""InnerEar""))"

@@ -1,4 +1,0 @@
-"0","lm.rie <- lmer(`Right Inner Ear` ~ Period + (1|Animal), data = rep) #singular
-"
-"2","boundary (singular) fit: see help('isSingular')
-"

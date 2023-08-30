@@ -1,5 +1,0 @@
-"0","rep.long <- rep %>% "
-"0","  pivot_longer(colnames(rep)[7:14]) %>% "
-"0","  mutate(body.part = paste0(str_split(name, "" "", simplify = T)[,2], "
-"0","                            str_split(name, "" "", simplify = T)[,3]),"
-"0","         side = str_split(name, "" "", simplify = T)[,1])"
